@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f9bcd9">
+<title>Paladis · Café, Dulces & Cócteles · Camagüey</title>
+<meta name="description" content="Café de especialidad, dulces, frapes, picaderas y cócteles. Haz tu pedido online en Paladis y confírmalo por WhatsApp.">
+<link rel="icon" href="img/logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="top"><img src="img/logo.jpg" alt="Paladis" class="logo"></div>
+  <nav id="tabs" aria-label="Categorías"></nav>
+</header>
+<section class="hero"><div>
+  <h1>Café, dulces y cócteles</h1>
+  <p>Un espacio acogedor para disfrutar buenos momentos. ¡Ven a vivir la experiencia!</p>
+  <div class="chips"><span>🛵 A domicilio</span><span>🥡 Para llevar</span><span>🪑 En el local</span></div>
+</div></section>
+<main><section id="grid" class="grid"></section></main>
+<footer>
+  <b>Paladis</b>
+  <span>📍 Tomás Betancourt #258, entre Bella Vista y Miguel Benavides, Camagüey</span>
+  <span>📞 <a href="tel:+5332290603">+53 32 290603</a> · 💬 <a href="https://wa.me/5353012038">+53 5 3012038</a></span>
+  <span><a href="https://instagram.com/paladis_cafeypostres">Instagram</a> · <a href="https://facebook.com/DulcesTentacionesCmg">Facebook</a></span>
+</footer>
+
+<button id="fab" aria-label="Abrir carrito">🛒<span id="badge">0</span></button>
+<div id="overlay"></div>
+<div id="toast"></div>
+<div id="modal" role="dialog" aria-modal="true"></div>
+
+<aside id="drawer" aria-label="Carrito">
+  <div class="dh"><h2>Tu pedido</h2><button class="x" id="closeCart" aria-label="Cerrar">✕</button></div>
+  <div id="items"></div>
+  <div class="df">
+    <div class="tot"><span>Total</span><b id="total"></b></div>
+    <input id="name" placeholder="Tu nombre" autocomplete="name">
+    <select id="mode"><option value="entrega">🛵 Entrega a domicilio</option><option value="recogida">🥡 Para llevar (recojo)</option><option value="local">🪑 Consumo en el local</option></select>
+    <input id="addr" placeholder="Dirección de entrega" autocomplete="street-address">
+    <button id="send" class="btn">Confirmar pedido por WhatsApp</button>
+  </div>
+</aside>
+<script src="data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
