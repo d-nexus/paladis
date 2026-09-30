@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Administración · Paladis</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body{padding:0}
+.w{max-width:860px;margin:auto;padding:16px}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0}
+.hd div{display:flex;gap:8px;align-items:center}
+.bar{margin:4px 0 12px}
+.r{display:flex;gap:10px;align-items:center;padding:10px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;margin-bottom:8px}
+.g{flex:1;min-width:0}.g small{display:block;color:var(--mut);overflow:hidden;text-overflow:ellipsis}
+.th{width:48px;height:48px;flex:none;border-radius:10px;background:var(--pk);display:grid;place-items:center;font-size:1.6rem;overflow:hidden}
+.th img{width:100%;height:100%;object-fit:cover}
+.sm{padding:6px 12px;border-radius:99px;background:var(--pk);color:var(--br);font-weight:600;flex:none}
+.sm:hover{background:var(--pk2);color:#fff}
+.f{display:grid;gap:4px}.f span{font-size:.85rem;color:var(--mut)}
+.ck{display:flex;gap:8px;align-items:center}.ck input{width:auto}
+.acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+dialog{border:0;border-radius:18px;padding:20px;width:min(480px,94%);max-height:90vh;background:var(--bg);color:var(--tx)}
+dialog::backdrop{background:#4a2a1499}
+dialog h2{margin-bottom:12px}
+dialog form{display:grid;gap:12px}
+#login{max-width:360px;margin:12vh auto;display:grid;gap:10px;padding:0 16px}
+#err{color:#b3261e;min-height:1.4em}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<form id="login" class="hide">
+  <h1>Paladis · Administración</h1>
+  <input id="em" type="email" placeholder="Correo" autocomplete="username" required>
+  <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+  <button class="btn">Entrar</button>
+  <p id="err"></p>
+</form>
+
+<div id="app" class="w hide">
+  <div class="hd"><h1>Panel de Paladis</h1><div><a href="index.html" target="_blank">Ver tienda</a><button class="sm" id="out">Salir</button></div></div>
+  <nav id="tabs" style="padding:6px 0 12px"></nav>
+  <div id="list"></div>
+</div>
+<dialog id="dlg"></dialog>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const slug = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const fmt = n => (D.s.symbol || "$") + Number(n).toFixed(2);
+const say = (m, bad) => { const t = $("#toast"); t.textContent = m; t.style.background = bad ? "#b3261e" : ""; t.classList.add("on"); clearTimeout(t.h); t.h = setTimeout(() => t.classList.remove("on"), 2500); };
+
+let T = "products", D = { c: [], p: [], g: [], s: {} };
+const TL = { products: "Productos", categories: "Categorías", option_groups: "Opciones", settings: "Ajustes" };
+const K = { products: "p", categories: "c", option_groups: "g" };
+const catName = id => (D.c.find(c => c.id === id) || {}).name || id;
+
+/* ---------- Sesión ---------- */
+function show(on, m = "") { $("#login").classList.toggle("hide", !!on); $("#app").classList.toggle("hide", !on); $("#err").textContent = m; }
+async function boot() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return show(0);
+  const { data } = await db.rpc("is_admin");
+  if (!data) { await db.auth.signOut(); return show(0, "Esta cuenta no tiene permisos de administrador."); }
+  show(1); load();
+}
+$("#login").onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.auth.signInWithPassword({ email: $("#em").value, password: $("#pw").value });
+  error ? show(0, "Correo o contraseña incorrectos.") : boot();
+};
+$("#out").onclick = async () => { await db.auth.signOut(); show(0); };
+
+/* ---------- Datos ---------- */
+async function load() {
+  const [c, p, g, s] = await Promise.all([
+    db.from("categories").select().order("sort"),
+    db.from("products").select().order("sort").order("id"),
+    db.from("option_groups").select().order("id"),
+    db.from("settings").select().eq("id", 1).single(),
+  ]);
+  const bad = c.error || p.error || g.error || s.error;
+  if (bad) return say(bad.message, 1);
+  D = { c: c.data, p: p.data, g: g.data, s: s.data };
+  render();
+}
+
+/* ---------- Lista ---------- */
+const R = {
+  products: p => [p.img ? `<img src="${esc(p.img)}" alt="">` : esc(p.emoji), p.name, `${esc(catName(p.cat))} · ${fmt(p.price)}${p.active ? "" : " · oculto"}`],
+  categories: c => [esc(c.icon), c.name, `orden ${c.sort}`],
+  option_groups: g => ["⚙️", g.label, esc(g.choices.map(c => c[0] + (+c[1] ? ` +${c[1]}` : "")).join(", "))],
+};
+function render() {
+  $("#tabs").innerHTML = Object.entries(TL).map(([k, l]) => `<button class="tab${k === T ? " on" : ""}" data-t="${k}">${l}</button>`).join("");
+  if (T === "settings") {
+    $("#list").innerHTML = `<div class="r"><div class="g"><b>${esc(D.s.name)}</b><small>WhatsApp: ${esc(D.s.whatsapp)} · Moneda: ${esc(D.s.symbol)}</small></div><button class="sm" data-ed="1">Editar</button></div>`;
+    return;
+  }
+  const rows = D[K[T]].map(x => {
+    const [a, b, c] = R[T](x);
+    return `<div class="r"><div class="th">${a}</div><div class="g"><b>${esc(b)}</b><small>${c}</small></div>
+      ${T === "products" ? `<button class="sm" data-tg="${x.id}">${x.active ? "Ocultar" : "Mostrar"}</button>` : ""}
+      <button class="sm" data-ed="${x.id}">Editar</button><button class="sm" data-del="${x.id}" aria-label="Eliminar">🗑</button></div>`;
+  }).join("");
+  $("#list").innerHTML = `<div class="bar"><button class="btn" data-new>+ Añadir</button></div>` + (rows || `<p class="empty">Aún no hay nada. Pulsa «Añadir».</p>`);
+}
+
+/* ---------- Formularios ---------- */
+const F = {
+  products: () => [
+    { k: "name", l: "Nombre", req: 1 },
+    { k: "description", l: "Descripción", t: "textarea", r: 2 },
+    { k: "cat", l: "Categoría", t: "select", o: D.c.map(c => [c.id, c.name]) },
+    { k: "price", l: "Precio", t: "number", req: 1 },
+    { k: "emoji", l: "Emoji (se muestra si no hay foto)" },
+    { k: "file", l: "Subir foto", t: "file" },
+    { k: "img", l: "…o enlace a una foto" },
+    { k: "sort", l: "Orden (menor = primero)", t: "number" },
+    { k: "opt_ids", l: "Opciones que ofrece", t: "multi", o: D.g.map(g => [g.id, g.label]) },
+    { k: "active", l: "Visible en la tienda", t: "check", d: true },
+  ],
+  categories: () => [{ k: "name", l: "Nombre", req: 1 }, { k: "icon", l: "Icono (emoji)" }, { k: "sort", l: "Orden", t: "number" }],
+  option_groups: () => [{ k: "label", l: "Nombre (ej: Tamaño)", req: 1 }, { k: "choices_txt", l: "Opciones, una por línea: Nombre|Precio extra", t: "textarea", r: 6 }],
+  settings: () => [{ k: "name", l: "Nombre del negocio", req: 1 }, { k: "whatsapp", l: "WhatsApp con código de país, sin + ni espacios", req: 1 }, { k: "symbol", l: "Símbolo de moneda", req: 1 }],
+};
+
+async function up(file) {
+  if (!file || !file.size) return null;
+  const n = Date.now() + "-" + file.name.replace(/[^\w.]/g, "_");
+  const { error } = await db.storage.from("products").upload(n, file, { cacheControl: "31536000" });
+  if (error) throw error;
+  return db.storage.from("products").getPublicUrl(n).data.publicUrl;
+}
+const w = async (table, row, x) => {
+  const { error } = await (x ? db.from(table).update(row).eq("id", x.id) : db.from(table).insert(row));
+  if (error) throw error;
+};
+const S = {
+  async products(o, x) {
+    const url = await up(o.file);
+    await w("products", { name: o.name, description: o.description, cat: o.cat, price: o.price, emoji: o.emoji, img: url || o.img || null, sort: o.sort || 0, opt_ids: o.opt_ids, active: o.active }, x);
+  },
+  async categories(o, x) {
+    const row = { name: o.name, icon: o.icon, sort: o.sort || 0 };
+    await w("categories", x ? row : { id: slug(o.name), ...row }, x);
+  },
+  async option_groups(o, x) {
+    const choices = o.choices_txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => { const [n, p] = l.split("|"); return [n.trim(), +p || 0]; });
+    await w("option_groups", { label: o.label, choices }, x);
+  },
+  async settings(o, x) { await w("settings", o, x); },
+};
+
+function fld(f, v) {
+  const val = v[f.k] ?? f.d ?? "", L = `<label class="f"><span>${f.l}</span>`;
+  if (f.t === "textarea") return `${L}<textarea name="${f.k}" rows="${f.r || 3}">${esc(val)}</textarea></label>`;
+  if (f.t === "select") return `${L}<select name="${f.k}">${f.o.map(([a, b]) => `<option value="${esc(a)}"${a == val ? " selected" : ""}>${esc(b)}</option>`).join("")}</select></label>`;
+  if (f.t === "check") return `<label class="ck"><input type="checkbox" name="${f.k}"${val ? " checked" : ""}> ${f.l}</label>`;
+  if (f.t === "multi") return `<fieldset><legend>${f.l}</legend>${f.o.map(([a, b]) => `<label class="ck"><input type="checkbox" name="${f.k}" value="${a}"${(val || []).includes(+a) ? " checked" : ""}> ${esc(b)}</label>`).join("") || "<small>Crea grupos en la pestaña Opciones.</small>"}</fieldset>`;
+  if (f.t === "file") return `${L}<input type="file" name="${f.k}" accept="image/*"></label>`;
+  return `${L}<input type="${f.t || "text"}" name="${f.k}" value="${esc(val)}"${f.t === "number" ? ' step="any"' : ""}${f.req ? " required" : ""}></label>`;
+}
+function openForm(title, fields, vals, save) {
+  const d = $("#dlg");
+  d.innerHTML = `<h2>${title}</h2><form>${fields.map(f => fld(f, vals)).join("")}<div class="acts"><button type="button" class="sm" id="cx">Cancelar</button><button class="btn">Guardar</button></div></form>`;
+  d.showModal();
+  $("#cx").onclick = () => d.close();
+  d.querySelector("form").onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target), o = {};
+    for (const f of fields) o[f.k] = f.t === "check" ? fd.has(f.k) : f.t === "multi" ? fd.getAll(f.k).map(Number) : f.t === "file" ? fd.get(f.k) : f.t === "number" ? (fd.get(f.k) === "" ? null : +fd.get(f.k)) : fd.get(f.k).trim();
+    const b = e.target.querySelector(".btn"); b.disabled = true;
+    try { await save(o); d.close(); say("Guardado ✓"); load(); } catch (x) { say(x.message || "Error al guardar", 1); b.disabled = false; }
+  };
+}
+function edit(id) {
+  if (T === "settings") return openForm("Ajustes", F.settings(), D.s, o => S.settings(o, D.s));
+  const x = id ? D[K[T]].find(i => String(i.id) === String(id)) : null;
+  const v = x ? { ...x } : {};
+  if (T === "option_groups" && x) v.choices_txt = x.choices.map(c => c[0] + "|" + c[1]).join("\n");
+  openForm(x ? "Editar" : "Nuevo", F[T](), v, o => S[T](o, x));
+}
+
+/* ---------- Eventos ---------- */
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const d = b.dataset;
+  if (d.t) { T = d.t; render(); }
+  else if ("new" in d) edit();
+  else if (d.ed) edit(d.ed);
+  else if (d.tg) { const p = D.p.find(x => x.id == d.tg); const { error } = await db.from("products").update({ active: !p.active }).eq("id", p.id); error ? say(error.message, 1) : load(); }
+  else if (d.del && confirm("¿Eliminar definitivamente?")) {
+    const { error } = await db.from(T).delete().eq("id", d.del);
+    error ? say(error.code === "23503" ? "No se puede eliminar: hay productos que lo usan." : error.message, 1) : (say("Eliminado"), load());
+  }
+});
+boot();
+</script>
+</body>
+</html>
