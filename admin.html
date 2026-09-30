@@ -74,7 +74,8 @@ async function boot() {
 $("#login").onsubmit = async e => {
   e.preventDefault();
   const { error } = await db.auth.signInWithPassword({ email: $("#em").value, password: $("#pw").value });
-  error ? show(0, "Correo o contraseña incorrectos.") : boot();
+  const m = { "Invalid login credentials": "Correo o contraseña incorrectos.", "Email not confirmed": "El correo no está confirmado. En Supabase marca «Auto Confirm User» o confirma al usuario." };
+  error ? show(0, (m[error.message] || error.message) + (error.status ? ` (${error.status})` : "")) : boot();
 };
 $("#out").onclick = async () => { await db.auth.signOut(); show(0); };
 
